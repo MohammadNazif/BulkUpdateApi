@@ -10,19 +10,19 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 // Set a large limit for bulk JSON payloads
-app.use(express.json({ limit: '50mb' })); 
+app.use(express.json({ limit: '50mb' }));
 
 app.post('/api/voters/bulk-update', async (req, res) => {
   try {
     const data = req.body;
-    
+
     // Basic validation
     if (!Array.isArray(data) || data.length === 0) {
       return res.status(400).json({ error: 'Request body must be a non-empty array of voter objects.' });
     }
 
     const pool = await poolPromise;
-    
+
     // Convert array to JSON string for OPENJSON parsing in SQL Server
     const jsonData = JSON.stringify(data);
 
@@ -42,7 +42,9 @@ app.post('/api/voters/bulk-update', async (req, res) => {
         t.othersParents = ISNULL(j.othersParents, t.othersParents),
         t.houseNo = ISNULL(j.houseNo, t.houseNo),
         t.age = ISNULL(j.age, t.age),
-        t.gender = ISNULL(j.gender, t.gender)
+        t.gender = ISNULL(j.gender, t.gender),
+        t.confidence = ISNULL(j.confidence, t.confidence),
+        t.NeedReview = ISNULL(j.NeedReview, t.NeedReview)
       FROM [tbl_TotalVoters] t
       INNER JOIN OPENJSON(@jsonData)
       WITH (
@@ -56,13 +58,15 @@ app.post('/api/voters/bulk-update', async (req, res) => {
           othersParents NVARCHAR(255),
           houseNo NVARCHAR(100),
           age INT,
+          confidence INT,
+          NeedReview BIT,
           gender NVARCHAR(50)
       ) j ON t.id = j.id
     `;
 
     const request = pool.request();
     request.input('jsonData', sql.NVarChar(sql.MAX), jsonData);
-    
+
     const result = await request.query(query);
 
     res.json({
