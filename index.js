@@ -37,6 +37,7 @@ app.post('/api/voters/bulk-update', async (req, res) => {
 
       // Handle relation mapping
       if (item.relationType && item.relationName) {
+        transformed.hasRelation = 1;
         const rType = item.relationType.toUpperCase();
         if (rType === 'HUSBAND') {
           transformed.husbandName = item.relationName;
@@ -47,6 +48,8 @@ app.post('/api/voters/bulk-update', async (req, res) => {
         } else {
           transformed.othersParents = item.relationName;
         }
+      } else {
+        transformed.hasRelation = 0;
       }
 
       // Handle confidence (convert 0-1 float to 0-100 INT)
@@ -75,10 +78,10 @@ app.post('/api/voters/bulk-update', async (req, res) => {
         t.voterNo = ISNULL(j.voterNo, t.voterNo),
         t.epic = ISNULL(j.epic, t.epic),
         t.name = ISNULL(j.name, t.name),
-        t.fatherName = ISNULL(j.fatherName, t.fatherName),
-        t.husbandName = ISNULL(j.husbandName, t.husbandName),
-        t.motherName = ISNULL(j.motherName, t.motherName),
-        t.othersParents = ISNULL(j.othersParents, t.othersParents),
+        t.fatherName = CASE WHEN j.hasRelation = 1 THEN j.fatherName ELSE ISNULL(j.fatherName, t.fatherName) END,
+        t.husbandName = CASE WHEN j.hasRelation = 1 THEN j.husbandName ELSE ISNULL(j.husbandName, t.husbandName) END,
+        t.motherName = CASE WHEN j.hasRelation = 1 THEN j.motherName ELSE ISNULL(j.motherName, t.motherName) END,
+        t.othersParents = CASE WHEN j.hasRelation = 1 THEN j.othersParents ELSE ISNULL(j.othersParents, t.othersParents) END,
         t.houseNo = ISNULL(j.houseNo, t.houseNo),
         t.age = ISNULL(j.age, t.age),
         t.gender = ISNULL(j.gender, t.gender),
@@ -99,7 +102,8 @@ app.post('/api/voters/bulk-update', async (req, res) => {
           age INT,
           confidence INT,
           NeedReview BIT,
-          gender NVARCHAR(50)
+          gender NVARCHAR(50),
+          hasRelation INT
       ) j ON t.id = j.id
     `;
 
