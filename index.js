@@ -23,8 +23,47 @@ app.post('/api/voters/bulk-update', async (req, res) => {
 
     const pool = await poolPromise;
 
+    // Map incoming format to our database schema
+    const transformedData = data.map(item => {
+      const transformed = {
+        id: item.id,
+        voterNo: item.voterNo,
+        epic: item.epic,
+        name: item.name,
+        houseNo: item.houseNo,
+        age: item.age,
+        gender: item.gender
+      };
+
+      // Handle relation mapping
+      if (item.relationType && item.relationName) {
+        const rType = item.relationType.toUpperCase();
+        if (rType === 'HUSBAND') {
+          transformed.husbandName = item.relationName;
+        } else if (rType === 'FATHER') {
+          transformed.fatherName = item.relationName;
+        } else if (rType === 'MOTHER') {
+          transformed.motherName = item.relationName;
+        } else {
+          transformed.othersParents = item.relationName;
+        }
+      }
+
+      // Handle confidence (convert 0-1 float to 0-100 INT)
+      if (typeof item.ocrConfidence === 'number') {
+        transformed.confidence = Math.round(item.ocrConfidence * 100);
+      }
+
+      // Handle needsEvaluation (map to NeedReview)
+      if (typeof item.needsEvaluation !== 'undefined') {
+        transformed.NeedReview = item.needsEvaluation ? 1 : 0;
+      }
+
+      return transformed;
+    });
+
     // Convert array to JSON string for OPENJSON parsing in SQL Server
-    const jsonData = JSON.stringify(data);
+    const jsonData = JSON.stringify(transformedData);
 
     // Using OPENJSON to perform a highly efficient bulk update
     // We update 't' from 'j' by matching on 'id'
