@@ -66,7 +66,6 @@ app.post('/api/voters/bulk-update', async (req, res) => {
           relationName NVARCHAR(255) '$.relationName'
       ) j ON t.id = j.id
     `;
-
     const request = pool.request();
     request.input('jsonData', sql.NVarChar(sql.MAX), jsonData);
 
@@ -80,6 +79,74 @@ app.post('/api/voters/bulk-update', async (req, res) => {
   } catch (err) {
     console.error('Error during bulk update:', err);
     res.status(500).json({ error: 'Internal server error during bulk update', details: err.message });
+  }
+});
+
+// Basic health check route
+app.post('/api/voters/flag-for-review', async (req, res) => {
+  try {
+    const { boothNos } = req.body || {};
+    
+    // Default to the provided booth numbers if none are provided
+    let boothNumbers = [86, 87, 88, 89, 90];
+    
+    if (boothNos && Array.isArray(boothNos) && boothNos.length > 0) {
+      // Ensure all are numbers to prevent SQL injection
+      boothNumbers = boothNos.filter(n => typeof n === 'number' || !isNaN(parseInt(n, 10))).map(Number);
+      if (boothNumbers.length === 0) {
+        return res.status(400).json({ error: 'boothNos must contain valid numbers' });
+      }
+    }
+    
+    const boothListStr = boothNumbers.join(',');
+
+    const pool = await poolPromise;
+    
+    const query = `
+      DECLARE @Updated TABLE (Id BIGINT);
+      UPDATE [MausamDB].[dbo].[tbl_TotalVoters]
+      SET NeedReview = 1
+      OUTPUT INSERTED.Id INTO @Updated(Id)
+      WHERE Status = 1
+        AND BoothNo IN (${boothListStr})
+        AND (
+              VoterNo       LIKE N'%:%' OR VoterNo       LIKE N'%ः%'
+           OR Epic          LIKE N'%:%' OR Epic          LIKE N'%ः%'
+           OR Name          LIKE N'%:%' OR Name          LIKE N'%ः%'
+           OR FatherName    LIKE N'%:%' OR FatherName    LIKE N'%ः%'
+           OR HusbandName   LIKE N'%:%' OR HusbandName   LIKE N'%ः%'
+           OR MotherName    LIKE N'%:%' OR MotherName    LIKE N'%ः%'
+           OR OthersParents LIKE N'%:%' OR OthersParents LIKE N'%ः%'
+           OR HouseNo       LIKE N'%:%' OR HouseNo       LIKE N'%ः%'
+           OR Age           LIKE N'%:%' OR Age           LIKE N'%ः%'
+           OR Gender        LIKE N'%:%' OR Gender        LIKE N'%ः%'
+           OR NeedReview IS NULL
+        );
+      SELECT *
+      FROM [MausamDB].[dbo].[tbl_TotalVoters]
+      WHERE BoothNo IN (${boothListStr})
+        AND NeedReview = 1;
+    `;
+    
+    const result = await pool.request().query(query);
+    
+    // The SELECT * query results are typically in the last recordset
+    const records = result.recordsets && result.recordsets.length > 0 
+      ? result.recordsets[result.recordsets.length - 1] 
+      : (result.recordset || []);
+      
+    // rowsAffected might contain the update count and select count
+    const updateCount = result.rowsAffected ? result.rowsAffected[0] : 0;
+    
+    res.json({
+      message: 'Review flags updated successfully',
+      updatedCount: updateCount,
+      data: records
+    });
+    
+  } catch (err) {
+    console.error('Error during flagging for review:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
